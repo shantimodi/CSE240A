@@ -11,9 +11,9 @@
 //
 // TODO:Student Information
 //
-const char *studentName = "NAME";
-const char *studentID   = "PID";
-const char *email       = "EMAIL";
+const char *studentName = "Shanti Modi";
+const char *studentID   = "A53305577";
+const char *email       = "shmodi@eng.ucsd.edu";
 
 //------------------------------------//
 //      Predictor Configuration       //
@@ -37,6 +37,11 @@ int verbose;
 //TODO: Add your own Branch Predictor data structures here
 //
 
+uint32_t global_history_register;
+uint32_t gShare_BHT_size = pow(2,13); //given
+uint32_t gShareBHTCurrentIndex;
+vector<uint8_t> gShareBHT;
+
 
 //------------------------------------//
 //        Predictor Functions         //
@@ -50,6 +55,7 @@ init_predictor()
   //
   //TODO: Initialize Branch Predictor Data Structures
   //
+  gShareBHT(gShare_BHT_size, 3); //Initializing to strongly taken
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -62,12 +68,15 @@ make_prediction(uint32_t pc)
   //
   //TODO: Implement prediction scheme
   //
-
+  uint32_t gShareBHTCurrentIndex = pc ^ (global_history_register & (pow(2,ghistoryBits) - 1)) % gShare_BHT_size ;
+  
   // Make a prediction based on the bpType
   switch (bpType) {
     case STATIC:
       return TAKEN;
     case GSHARE:
+      if(gShareBHT[gShareBHTCurrentIndex] > 1)       
+       return TAKEN;
     case TOURNAMENT:
     case CUSTOM:
     default:
@@ -88,4 +97,11 @@ train_predictor(uint32_t pc, uint8_t outcome)
   //
   //TODO: Implement Predictor training
   //
-}
+  uint8_t previous_value = gShareBHT[gShareBHTCurrentIndex];
+  uint8_t new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0));
+  
+  gShareBHT[gShareBHTCurrentIndex] = new_value;
+  global_history_register<<=1;
+  global_history_register |= outcome;
+  
+  }

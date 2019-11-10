@@ -45,7 +45,7 @@ uint32_t gshare_BHT_size = 0x0;
 uint32_t local_PHT_size  = 0x0;
 uint32_t local_BHT_size  = 0x0;
 uint32_t global_BHT_size = 0x0;
-uint32_t chooser_size   =  0x0;
+uint32_t chooser_size   = 0x0;
 uint32_t custom_BHT_size = 0x0;
 
 uint8_t *gshare_BHT;
@@ -86,7 +86,7 @@ init_predictor()
    chooser_size = ONE<<ghistoryBits;
    custom_BHT_size = ONE<<13;
    
-   gshare_BHT = calloc(gshare_BHT_size, sizeof(uint8_t));
+   gshare_BHT = (uint8_t *)calloc(gshare_BHT_size, sizeof(uint8_t));
    for(int i=0; i<gshare_BHT_size; i++)
      gshare_BHT[i]=0x01;
    local_PHT = calloc(local_PHT_size, sizeof(uint32_t));
@@ -124,7 +124,7 @@ make_prediction(uint32_t pc)
       return TAKEN;
 	  
     case GSHARE:
-	  gshare_BHT_current_Index = (pc ^ (global_history_register & (uint32_t)((ONE<< ghistoryBits)-1)))%gshare_BHT_size;
+	  gshare_BHT_current_Index = (pc ^ (global_history_register & (uint32_t)((ONE<< ghistoryBits)-1)))% gshare_BHT_size;
       if(gshare_BHT[gshare_BHT_current_Index] > 1)       
        return TAKEN;
    
@@ -176,7 +176,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
       previous_value = gshare_BHT[gshare_BHT_current_Index];
       new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0);
       gshare_BHT[gshare_BHT_current_Index] = new_value;
-	  return;
+	  break;
      
     case TOURNAMENT:	 
 	
@@ -207,7 +207,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
       //updating PHT
       local_PHT[local_PHT_current_Index]<<=1;
       local_PHT[local_PHT_current_Index] |= outcome;
-	  return;
+	  break;
 	  
 	case CUSTOM:
 	  previous_value = custom_prediction;
@@ -216,21 +216,22 @@ train_predictor(uint32_t pc, uint8_t outcome)
 	  switch(pc%4)
 	  {
 	  case 0 : 
-	    new_value = (custom_BHT[custom_BHT_current_Index] & 11111100) | new_value_2;
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 0x11111100) | new_value_2;
 	    break;       
 	  case 1 : 
-	    new_value = (custom_BHT[custom_BHT_current_Index] & 11110011) | (new_value_2 << 2);
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 0x11110011) | (new_value_2 << 2);
 		break;
 	  case 2 : 
-	    new_value = (custom_BHT[custom_BHT_current_Index] & 11001111) | (new_value_2 << 4);
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 0x11001111) | (new_value_2 << 4);
 		break;
 	  case 3 : 
-	    new_value = (custom_BHT[custom_BHT_current_Index] & 00111111) | (new_value_2 << 6);
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 0x00111111) | (new_value_2 << 6);
 		break;
 	  default:
         break;
 	  }
 	  custom_BHT[custom_BHT_current_Index] = new_value;
+	  break;
 	  
     default:
       break;	
@@ -238,5 +239,6 @@ train_predictor(uint32_t pc, uint8_t outcome)
   
   // updating global history register
   global_history_register<<=1;
-  global_history_register |= outcome;  
+  global_history_register |= outcome;
+  
   }

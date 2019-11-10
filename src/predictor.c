@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include "predictor.h"
 
+#define ONE 0x1
+
 //
 // TODO:Student Information
 //
@@ -39,12 +41,12 @@ int verbose;
 
 uint32_t global_history_register;
 
-uint32_t gshare_BHT_size = 1<<ghistoryBits; //given
-uint32_t local_PHT_size = 1<<pcIndexBits;
-uint32_t local_BHT_size = 1<<lhistoryBits;
-uint32_t global_BHT_size = 1<<ghistoryBits;
-uint32_t chooser_size = 1<<ghistoryBits;
-uint32_t custom_BHT_size = 1<<13;
+uint32_t gshare_BHT_size = 0x0;
+uint32_t local_PHT_size  = 0x0;
+uint32_t local_BHT_size  = 0x0;
+uint32_t global_BHT_size = 0x0;
+uint32_t chooser_size   =  0x0;
+uint32_t custom_BHT_size = 0x0;
 
 uint8_t *gshare_BHT;
 uint32_t *local_PHT;
@@ -76,12 +78,30 @@ init_predictor()
   //
   //TODO: Initialize Branch Predictor Data Structures
   //
+  
+   gshare_BHT_size = ONE<<ghistoryBits; 
+   local_PHT_size = ONE<<pcIndexBits;
+   local_BHT_size = ONE<<lhistoryBits;
+   global_BHT_size = ONE<<ghistoryBits;
+   chooser_size = ONE<<ghistoryBits;
+   custom_BHT_size = ONE<<13;
+   
    gshare_BHT = calloc(gshare_BHT_size, sizeof(uint8_t));
+   for(int i=0; i<gshare_BHT_size; i++)
+     gshare_BHT[i]=0x01;
    local_PHT = calloc(local_PHT_size, sizeof(uint32_t));
    local_BHT = calloc(local_BHT_size, sizeof(uint8_t));
+   for(int i=0; i<local_BHT_size; i++)
+     local_BHT[i]=0x01;
    global_BHT = calloc(global_BHT_size, sizeof(uint8_t));
+   for(int i=0; i<global_BHT_size; i++)
+     global_BHT[i]=0x01;
    chooser = calloc(chooser_size, sizeof(uint8_t));
-   custom = calloc(custom_size, sizeof(uint8_t));
+   for(int i=0; i<chooser_size; i++)
+     chooser[i]=0x10;
+   custom_BHT = calloc(custom_BHT_size, sizeof(uint8_t));	 
+   for(int i=0; i<custom_BHT_size; i++)
+     custom_BHT[i]=0x01;
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -104,17 +124,17 @@ make_prediction(uint32_t pc)
       return TAKEN;
 	  
     case GSHARE:
-	  gshare_BHT_current_Index = pc ^ (global_history_register & (uint32_t)((1<< ghistoryBits)-1));
-      if(g_share_BHT[gshare_BHT_current_Index] > 1)       
+	  gshare_BHT_current_Index = (pc ^ (global_history_register & (uint32_t)((ONE<< ghistoryBits)-1)))%gshare_BHT_size;
+      if(gshare_BHT[gshare_BHT_current_Index] > 1)       
        return TAKEN;
    
     case TOURNAMENT:
-	  local_PHT_current_Index = pc & (uint32_t)((1<<pcIndexBits)-1);
+	  local_PHT_current_Index = pc & (uint32_t)((ONE<<pcIndexBits)-1);
 	  local_BHT_32_bit_Index = local_PHT[local_PHT_current_Index];
-	  local_BHT_current_Index = (local_BHT_32_bit_Index) & (uint32_t)((1<<lhistoryBits)-1);
+	  local_BHT_current_Index = (local_BHT_32_bit_Index) & (uint32_t)((ONE<<lhistoryBits)-1);
 	  local_prediction = local_BHT[local_BHT_current_Index];
 	  
-	  global_BHT_current_Index = global_history_register & (uint32_t)((1<<ghistoryBits)-1);
+	  global_BHT_current_Index = global_history_register & (uint32_t)((ONE<<ghistoryBits)-1);
 	  global_prediction = global_BHT[global_BHT_current_Index];
 	  chooser_prediction = chooser[global_BHT_current_Index];
 	
@@ -123,7 +143,7 @@ make_prediction(uint32_t pc)
 	  return (local_prediction > 1 ? TAKEN : NOTTAKEN);
 	  
     case CUSTOM:
-	 custom_BHT_current_Index = (pc>>2) ^ (global_history_register & (uint32_t)((1<< 13)-1));
+	 custom_BHT_current_Index = ((pc>>2) ^ (global_history_register & (uint32_t)((ONE<< 13)-1)))%gshare_BHT_size;
 	 custom_prediction = (custom_BHT[custom_BHT_current_Index] >> (pc%4)*2) & 3; 
 	 return (custom_prediction > 1 ? TAKEN : NOTTAKEN);
     default:
@@ -146,15 +166,15 @@ train_predictor(uint32_t pc, uint8_t outcome)
   //
   
   uint8_t previous_value = 0;
-  uint8_t new_value = 0;
-  bool array[8]={0};
+  uint8_t new_value, new_value_2 = 0;
   uint16_t counter = 0;
+  uint8_t is_global_correct=0;
   
   switch (bpType) {
     
     case GSHARE:
-      previous_value = g_share_BHT[gshare_BHT_current_Index];
-      new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0));
+      previous_value = gshare_BHT[gshare_BHT_current_Index];
+      new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0);
       gshare_BHT[gshare_BHT_current_Index] = new_value;
 	  return;
      
@@ -166,7 +186,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
 	     is_global_correct = (outcome == ((global_prediction)>>1)) ? 1 : 0;
 	     
 	     previous_value = chooser[global_BHT_current_Index];
-	     new_value = is_global_correct ? (previous_value !=3) ? (previous_value + 1) : 3) : ( (previous_value !=0) ? (previous_value - 1) : 0));
+	     new_value = is_global_correct ? ((previous_value !=3) ? (previous_value + 1) : 3) : ( (previous_value !=0) ? (previous_value - 1) : 0);
 	     chooser[global_BHT_current_Index] = new_value;
 	     
       }
@@ -174,14 +194,14 @@ train_predictor(uint32_t pc, uint8_t outcome)
 	  //training local_predictor
 	      
       previous_value = local_prediction;
-      new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0));
+      new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0);
       local_BHT[local_BHT_current_Index] = new_value;
       
 	  
 	  //training global predictor
 	  
       previous_value = global_prediction;
-      new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0));
+      new_value = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0);
       global_BHT[global_BHT_current_Index] = new_value;
       
       //updating PHT
@@ -191,15 +211,25 @@ train_predictor(uint32_t pc, uint8_t outcome)
 	  
 	case CUSTOM:
 	  previous_value = custom_prediction;
-	  new_value_2 = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0));  
+	  new_value_2 = outcome ? ((previous_value != 3) ? (previous_value + 1) : 3) : ( (previous_value != 0) ? (previous_value - 1) : 0);  
 	  
-	  switch(pc%4):
-	  
-	  case 0 : new_value = (custom_BHT[custom_BHT_current_Index] & 11111100) | new_value_2;
-	  case 1 : new_value = (custom_BHT[custom_BHT_current_Index] & 11110011) | (new_value_2 << 2);
-	  case 2 : new_value = (custom_BHT[custom_BHT_current_Index] & 11001111) | (new_value_2 << 4);
-	  case 3 : new_value = (custom_BHT[custom_BHT_current_Index] & 00111111) | (new_value_2 << 6);
-	  
+	  switch(pc%4)
+	  {
+	  case 0 : 
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 11111100) | new_value_2;
+	    break;       
+	  case 1 : 
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 11110011) | (new_value_2 << 2);
+		break;
+	  case 2 : 
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 11001111) | (new_value_2 << 4);
+		break;
+	  case 3 : 
+	    new_value = (custom_BHT[custom_BHT_current_Index] & 00111111) | (new_value_2 << 6);
+		break;
+	  default:
+        break;
+	  }
 	  custom_BHT[custom_BHT_current_Index] = new_value;
 	  
     default:
@@ -208,6 +238,5 @@ train_predictor(uint32_t pc, uint8_t outcome)
   
   // updating global history register
   global_history_register<<=1;
-  global_history_register |= outcome;
-  
+  global_history_register |= outcome;  
   }
